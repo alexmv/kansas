@@ -9,6 +9,7 @@ mod error_response;
 mod handler;
 mod health;
 mod server;
+mod state;
 
 #[tokio::main]
 pub async fn main() -> Result<(), io::Error> {
@@ -27,7 +28,7 @@ pub async fn main() -> Result<(), io::Error> {
         .get_matches();
     let config_path = matches.value_of("config").unwrap().to_string();
 
-    env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let config = read_initial_config(&config_path).await?;
     try_join!(
