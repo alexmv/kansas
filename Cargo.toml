@@ -1,8 +1,12 @@
+[workspace]
+members = [ "fake-tornado" ]
+
 [package]
 name = "kansas"
 version = "1.0.0"
 authors = ["Alex Vandiver <alexmv@zulip.com>"]
 edition = "2021"
+exclude = ["fake-tornado/"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
