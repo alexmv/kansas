@@ -2,6 +2,7 @@ use crate::{
     configuration::RuntimeConfig,
     error_response::{bad_gateway, bad_queue, log_error},
     health::{update_health, HealthConfig, Healthiness},
+    metrics,
     state::{choose_backend, store_backend, BadBackendError},
 };
 use arc_swap::ArcSwap;
@@ -45,34 +46,41 @@ impl Service<Request<Body>> for MainService {
             request.uri()
         );
 
+        if request.uri().path() == "/metrics" {
+            return Box::pin(async move { metrics::handler() });
+        }
+
         let config = self.config.load();
 
         let pool = config.backend.clone();
         let queue_map = self.queue_map.clone();
         let client_address = self.client_address;
 
-        Box::pin(async move {
-            let method = request.method().clone();
-            let backend = choose_backend(pool.clone(), queue_map.clone(), &mut request).await;
-            match backend {
-                Ok((port, chosen_backend)) => {
-                    let resp = forward_request_to_backend(
-                        chosen_backend.as_str(),
-                        request,
-                        &client_address,
-                        pool.clone(),
-                    )
-                    .await;
-                    store_backend(queue_map, method, &resp, port);
-                    Ok(resp)
+        Box::pin(metrics::instrumented(
+            request.method().clone(),
+            async move {
+                let method = request.method().clone();
+                let backend = choose_backend(pool.clone(), queue_map.clone(), &mut request).await;
+                match backend {
+                    Ok((port, chosen_backend)) => {
+                        let resp = forward_request_to_backend(
+                            chosen_backend.as_str(),
+                            request,
+                            &client_address,
+                            pool.clone(),
+                        )
+                        .await;
+                        store_backend(queue_map, method, &resp, port);
+                        Ok(resp)
+                    }
+                    Err(BadBackendError::UnknownQueue(q)) => Ok(bad_queue(q)),
+                    Err(error) => {
+                        log_error(error);
+                        Ok(bad_gateway())
+                    }
                 }
-                Err(BadBackendError::UnknownQueue(q)) => Ok(bad_queue(q)),
-                Err(error) => {
-                    log_error(error);
-                    Ok(bad_gateway())
-                }
-            }
-        })
+            },
+        ))
     }
 }
 

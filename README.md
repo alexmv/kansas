@@ -110,5 +110,4 @@ what-not, however.
   - store in redis
   - just talk to postgres directly
 - Paper over Tornado restarts
-- Prometheus metrics
 - Request tracing?
