@@ -1,0 +1,9 @@
+listen_address = "127.0.0.1:9799"
+
+[backend]
+addresses = ["127.0.0.1:9800","127.0.0.1:9801"]
+
+[backend.health_config]
+path = "/health"
+timeout = "500ms"
+interval = "5s"
