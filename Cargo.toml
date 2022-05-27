@@ -8,13 +8,12 @@ authors = ["Alex Vandiver <alexmv@zulip.com>"]
 edition = "2021"
 exclude = ["fake-tornado/"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0.57"
 arc-swap = "1.5.0"
 bytes = "1.1.0"
 clap = "3.1.18"
+console-subscriber = "0.1.6"
 dashmap = "5.3.3"
 env_logger = "0.9.0"
 futures = "0.3.21"
@@ -29,7 +28,7 @@ rand = "0.8.5"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = "1.0.81"
 thiserror = "1.0.31"
-tokio = { version = "1.18.2", features = ["full"] }
+tokio = { version = "1.18.2", features = ["full", "tracing"] }
 tokio-test = "0.4.2"
 toml = { version = "0.5.9", features = ["preserve_order"] }
 url = "2.2.2"
