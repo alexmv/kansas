@@ -26,11 +26,10 @@ where
 {
     let config = TomlConfig::read(&path)?;
     let listen_address = config.listen_address.parse().map_err(invalid_data)?;
-    let pool: Arc<BackendPool> = Arc::new(config.backend.into());
 
     Ok(RuntimeConfig {
         listen_address,
-        backend: pool,
+        backend: config.backend.into(),
     })
 }
 
@@ -43,7 +42,7 @@ where
 
 pub struct RuntimeConfig {
     pub listen_address: SocketAddr,
-    pub backend: Arc<BackendPool>,
+    pub backend: BackendPool,
 }
 
 #[derive(Debug, Deserialize)]
