@@ -60,17 +60,17 @@ impl Service<Request<Body>> for MainService {
             request.method().clone(),
             async move {
                 let method = request.method().clone();
-                let backend = choose_backend(pool.clone(), queue_map.clone(), &mut request).await;
+                let backend = choose_backend(&pool, &queue_map, &mut request).await;
                 match backend {
                     Ok((port, chosen_backend)) => {
                         let resp = forward_request_to_backend(
                             &chosen_backend,
                             request,
                             &client_address,
-                            pool.clone(),
+                            &pool,
                         )
                         .await;
-                        store_backend(queue_map, method, &resp, port);
+                        store_backend(&queue_map, method, &resp, port);
                         Ok(resp)
                     }
                     Err(BadBackendError::UnknownQueue(q)) => Ok(bad_queue(q)),
@@ -98,7 +98,7 @@ async fn forward_request_to_backend(
     backend_address: &str,
     request: Request<Body>,
     client_address: &SocketAddr,
-    pool: Arc<BackendPool>,
+    pool: &BackendPool,
 ) -> Response<Body> {
     let path = request.uri().path_and_query().unwrap().clone();
     let url = Uri::builder()
