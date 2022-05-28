@@ -4,6 +4,7 @@ use bytes::Bytes;
 use dashmap::DashMap;
 use hyper::{Body, Method, Request, Response};
 use log::{debug, info};
+use std::mem;
 use thiserror::Error;
 use url::form_urlencoded;
 
@@ -24,6 +25,29 @@ pub enum BadBackendError {
     UnknownQueue(String),
 }
 
+// This RAII wrapper streams a request body into memory so we can
+// examine it; when the wrapper is dropped, we stuff the body back
+// into the request so it can be forwarded to the backend.
+struct PeekBody<'a> {
+    bytes: Bytes,
+    body: &'a mut Body,
+}
+
+impl PeekBody<'_> {
+    async fn new(body: &mut Body) -> Result<PeekBody, hyper::Error> {
+        Ok(PeekBody {
+            bytes: hyper::body::to_bytes(&mut *body).await?,
+            body,
+        })
+    }
+}
+
+impl Drop for PeekBody<'_> {
+    fn drop(&mut self) {
+        *self.body = Body::from(mem::take(&mut self.bytes));
+    }
+}
+
 async fn get_port(
     queue_map: Arc<DashMap<String, u16>>,
     request: &mut Request<Body>,
@@ -41,25 +65,19 @@ async fn get_port(
             .parse::<u16>()
             .map_err(|_| BadBackendError::BadRequest("Failed to parse port as int".into()))?)
     } else {
-        let buffer = match *request.method() {
+        let peek_body;
+        let body_bytes = match *request.method() {
             Method::DELETE => {
-                // We need to consume the body from the request, while
-                // also leaving it to be sent to the backend
-                let buf = hyper::body::to_bytes(request.body_mut())
-                    .await
-                    .map_err(|_| {
-                        BadBackendError::BadRequest("Failed to read request body".into())
-                    })?;
-                *request.body_mut() = Body::from(buf.clone());
-                buf
+                peek_body = PeekBody::new(request.body_mut()).await.map_err(|_| {
+                    BadBackendError::BadRequest("Failed to read request body".into())
+                })?;
+                &peek_body.bytes
             }
-            Method::GET => Bytes::from(
-                request
-                    .uri()
-                    .query()
-                    .ok_or_else(|| BadBackendError::BadRequest("No query string".into()))?
-                    .to_owned(),
-            ),
+            Method::GET => request
+                .uri()
+                .query()
+                .ok_or_else(|| BadBackendError::BadRequest("No query string".into()))?
+                .as_bytes(),
             _ => {
                 return Err(BadBackendError::BadRequest(format!(
                     "Unknown method {}",
@@ -67,7 +85,7 @@ async fn get_port(
                 )))
             }
         };
-        let queue_id = form_urlencoded::parse(&buffer)
+        let queue_id = form_urlencoded::parse(body_bytes)
             .into_owned()
             .find(|pair| pair.0 == "queue_id")
             .ok_or_else(|| BadBackendError::UnknownQueue("(missing)".into()))?
