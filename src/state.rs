@@ -1,8 +1,7 @@
 use crate::{handler::BackendPool, health::Healthiness};
 use anyhow::Result;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use dashmap::DashMap;
-use hyper::body::HttpBody;
 use hyper::{Body, Method, Request, Response};
 use log::{debug, info};
 use thiserror::Error;
@@ -46,14 +45,11 @@ async fn get_port(
             Method::DELETE => {
                 // We need to consume the body from the request, while
                 // also leaving it to be sent to the backend
-                let body = request.body_mut();
-                let mut buf = BytesMut::with_capacity(body.size_hint().lower() as usize);
-                while let Some(chunk) = body.data().await {
-                    buf.extend_from_slice(&chunk.map_err(|_| {
+                let buf = hyper::body::to_bytes(request.body_mut())
+                    .await
+                    .map_err(|_| {
                         BadBackendError::BadRequest("Failed to read request body".into())
-                    })?);
-                }
-                let buf = buf.freeze();
+                    })?;
                 *request.body_mut() = Body::from(buf.clone());
                 buf
             }
