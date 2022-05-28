@@ -8,8 +8,6 @@ use std::mem;
 use thiserror::Error;
 use url::form_urlencoded;
 
-use std::sync::Arc;
-
 #[derive(Error, Debug)]
 pub enum BadBackendError {
     #[error("Bad request: {0}")]
@@ -49,7 +47,7 @@ impl Drop for PeekBody<'_> {
 }
 
 async fn get_port(
-    queue_map: Arc<DashMap<String, u16>>,
+    queue_map: &DashMap<String, u16>,
     request: &mut Request<Body>,
 ) -> Result<u16, BadBackendError> {
     if request.uri().path() == "/api/v1/events/internal" {
@@ -103,8 +101,8 @@ async fn get_port(
 }
 
 pub async fn choose_backend(
-    pool: Arc<BackendPool>,
-    queue_map: Arc<DashMap<String, u16>>,
+    pool: &BackendPool,
+    queue_map: &DashMap<String, u16>,
     request: &mut Request<Body>,
 ) -> Result<(u16, String), BadBackendError> {
     let port = get_port(queue_map, request).await?;
@@ -122,7 +120,7 @@ pub async fn choose_backend(
 }
 
 pub fn store_backend(
-    queue_map: Arc<DashMap<String, u16>>,
+    queue_map: &DashMap<String, u16>,
     method: Method,
     resp: &Response<Body>,
     port: u16,
