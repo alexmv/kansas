@@ -52,8 +52,8 @@ impl Service<Request<Body>> for MainService {
 
         let config = self.config.load();
 
-        let pool = config.backend.clone();
-        let queue_map = self.queue_map.clone();
+        let pool = Arc::clone(&config.backend);
+        let queue_map = Arc::clone(&self.queue_map);
         let client_address = self.client_address;
 
         Box::pin(metrics::instrumented(

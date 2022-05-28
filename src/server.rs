@@ -11,8 +11,8 @@ pub async fn create(config: Arc<ArcSwap<RuntimeConfig>>) -> Result<(), io::Error
     let address = config.load().listen_address;
     let service = make_service_fn(move |stream: &AddrStream| {
         let client_address = stream.remote_addr();
-        let config = config.clone();
-        let queue_map = queue_map.clone();
+        let config = Arc::clone(&config);
+        let queue_map = Arc::clone(&queue_map);
 
         async move {
             Ok::<_, io::Error>(MainService {
