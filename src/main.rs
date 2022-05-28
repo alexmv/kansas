@@ -38,8 +38,8 @@ pub async fn main() -> Result<(), io::Error> {
 
     let config = read_initial_config(&config_path).await?;
     try_join!(
-        watch_health(config.clone()),
-        listen_for_http_request(config.clone()),
+        watch_health(Arc::clone(&config)),
+        listen_for_http_request(Arc::clone(&config)),
     )?;
     Ok(())
 }
