@@ -91,7 +91,7 @@ async fn get_port(
             .ok_or_else(|| BadBackendError::UnknownQueue("(missing)".into()))?
             .1;
         let queue_backend = queue_map
-            .get(queue_id.as_str())
+            .get(&queue_id)
             .ok_or(BadBackendError::UnknownQueue(queue_id))?;
         debug!(
             "Routing queue {} to port {}",
@@ -111,7 +111,7 @@ pub async fn choose_backend(
     let backend = format!("127.0.0.1:{}", port);
     let health = pool
         .addresses
-        .get(backend.as_str())
+        .get(&backend)
         .ok_or_else(|| BadBackendError::UnknownHost(backend.clone()))?;
     if health.load().as_ref() != &Healthiness::Healthy {
         // Backend is down, stall for time?

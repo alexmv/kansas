@@ -73,7 +73,7 @@ async fn check_server_health_once(
         .unwrap();
 
     let result = contact_server(uri, health_config.timeout).await;
-    update_health(server_address.as_str(), &result, healthiness, true)
+    update_health(&server_address, &result, healthiness, true)
 }
 
 async fn contact_server(server_address: Uri, timeout: Duration) -> Result<Response<Body>> {

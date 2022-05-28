@@ -64,7 +64,7 @@ impl Service<Request<Body>> for MainService {
                 match backend {
                     Ok((port, chosen_backend)) => {
                         let resp = forward_request_to_backend(
-                            chosen_backend.as_str(),
+                            &chosen_backend,
                             request,
                             &client_address,
                             pool.clone(),
