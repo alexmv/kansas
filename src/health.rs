@@ -11,6 +11,7 @@ use log::info;
 use serde::Deserialize;
 use std::{
     fmt::{self, Debug},
+    str::FromStr,
     sync::Arc,
     time::Duration,
 };
@@ -68,7 +69,7 @@ async fn check_server_health_once(
     let uri = uri::Uri::builder()
         .scheme("http")
         .path_and_query(&health_config.path)
-        .authority(Authority::from_maybe_shared(server_address.clone()).unwrap())
+        .authority(Authority::from_str(&server_address).unwrap())
         .build()
         .unwrap();
 
