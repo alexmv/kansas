@@ -42,8 +42,8 @@ async fn get_port(
             .parse::<u16>()
             .map_err(|_| BadBackendError::BadRequest("Failed to parse port as int".into()))?)
     } else {
-        let buffer = match request.method().as_str() {
-            "DELETE" => {
+        let buffer = match *request.method() {
+            Method::DELETE => {
                 // We need to consume the body from the request, while
                 // also leaving it to be sent to the backend
                 let body = request.body_mut();
@@ -57,7 +57,7 @@ async fn get_port(
                 *request.body_mut() = Body::from(buf.clone());
                 buf
             }
-            "GET" => Bytes::from(
+            Method::GET => Bytes::from(
                 request
                     .uri()
                     .query()
@@ -116,7 +116,7 @@ pub fn store_backend(
     if resp.status().is_success() {
         if let Some(queue_header) = resp.headers().get("x-tornado-queue-id") {
             if let Ok(queue_id) = queue_header.to_str() {
-                if method == "DELETE" {
+                if method == Method::DELETE {
                     info!("Removed queue {} from port {}", queue_id, port);
                     queue_map.remove(queue_id).unwrap();
                 } else {
