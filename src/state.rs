@@ -4,7 +4,7 @@ use bytes::{Bytes, BytesMut};
 use dashmap::DashMap;
 use hyper::body::HttpBody;
 use hyper::{Body, Method, Request, Response};
-use log::{info, debug};
+use log::{debug, info};
 use thiserror::Error;
 use url::form_urlencoded;
 
@@ -79,7 +79,11 @@ async fn get_port(
         let queue_backend = queue_map
             .get(queue_id.as_str())
             .ok_or(BadBackendError::UnknownQueue(queue_id))?;
-        debug!("Routing queue {} to port {}", queue_backend.key(), *queue_backend);
+        debug!(
+            "Routing queue {} to port {}",
+            queue_backend.key(),
+            *queue_backend
+        );
         Ok(*queue_backend)
     }
 }
