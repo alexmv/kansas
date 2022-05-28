@@ -87,9 +87,8 @@ impl Service<Request<Body>> for MainService {
 fn append_forwarded_for(existing_forwarded_for: Option<&HeaderValue>, client_ip: String) -> String {
     match existing_forwarded_for {
         Some(existing_forwarded_for) => {
-            let mut forwarded_for = existing_forwarded_for.to_str().unwrap_or("").to_owned();
-            forwarded_for.push_str(&format!(", {}", &client_ip));
-            forwarded_for
+            let forwarded_for = existing_forwarded_for.to_str().unwrap_or("");
+            format!("{}, {}", forwarded_for, client_ip)
         }
         None => client_ip,
     }
