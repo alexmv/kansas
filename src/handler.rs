@@ -115,8 +115,7 @@ async fn forward_request_to_backend(
         IpAddr::V4(v4) => v4.to_string(),
         IpAddr::V6(v6) => v6
             .to_ipv4()
-            .map(|v4| v4.to_string())
-            .unwrap_or_else(|| v6.to_string()),
+            .map_or_else(|| v6.to_string(), |v4| v4.to_string()),
     };
     let builder = request
         .headers()
