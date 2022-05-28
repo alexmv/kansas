@@ -52,22 +52,22 @@ impl Service<Request<Body>> for MainService {
 
         let config = self.config.load();
 
-        let pool = Arc::clone(&config.backend);
         let queue_map = Arc::clone(&self.queue_map);
         let client_address = self.client_address;
 
         Box::pin(metrics::instrumented(
             request.method().clone(),
             async move {
+                let pool = &config.backend;
                 let method = request.method().clone();
-                let backend = choose_backend(&pool, &queue_map, &mut request).await;
+                let backend = choose_backend(pool, &queue_map, &mut request).await;
                 match backend {
                     Ok((port, chosen_backend)) => {
                         let resp = forward_request_to_backend(
                             &chosen_backend,
                             request,
                             &client_address,
-                            &pool,
+                            pool,
                         )
                         .await;
                         store_backend(&queue_map, method, &resp, port);
