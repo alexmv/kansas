@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+if ! [ -d "./venv" ]; then
+	python3 -mvenv ./venv
+	source ./venv/bin/activate
+	pip install -r requirements.txt
+fi
+
+cores=$(getconf _NPROCESSORS_ONLN)
+
+for _ in $(seq 1 "$cores"); do
+	./venv/bin/locust --worker &
+done
+
+./venv/bin/locust --master
