@@ -42,11 +42,10 @@ impl fmt::Display for Healthiness {
     }
 }
 
-pub async fn watch_health(config: Arc<ArcSwap<RuntimeConfig>>) {
-    let mut interval_timer = interval(config.load().backend.health_config.interval);
+pub async fn watch_health(config: &RuntimeConfig) {
+    let mut interval_timer = interval(config.backend.health_config.interval);
     loop {
         interval_timer.tick().await;
-        let config = config.load();
         let mut checks = Vec::new();
         for (server_address, healthiness) in &config.backend.addresses {
             let future = check_server_health_once(

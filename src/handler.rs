@@ -24,7 +24,7 @@ use std::{
 
 pub struct MainService {
     pub client_address: SocketAddr,
-    pub config: Arc<ArcSwap<RuntimeConfig>>,
+    pub config: Arc<RuntimeConfig>,
     pub queue_map: Arc<DashMap<String, u16>>,
 }
 
@@ -50,7 +50,7 @@ impl Service<Request<Body>> for MainService {
             return Box::pin(async move { metrics::handler() });
         }
 
-        let config = self.config.load();
+        let config = Arc::clone(&self.config);
 
         let queue_map = Arc::clone(&self.queue_map);
         let client_address = self.client_address;
