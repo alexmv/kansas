@@ -4,20 +4,15 @@ use crate::{
 };
 use arc_swap::ArcSwap;
 use serde::Deserialize;
-use std::{
-    error::Error, fmt::Debug, fs, io, net::SocketAddr, path::Path, sync::Arc, time::Duration,
-};
+use std::{error::Error, fmt::Debug, fs, io, net::SocketAddr, path::Path, time::Duration};
 
-pub async fn read_initial_config<P: AsRef<Path>>(
-    path: P,
-) -> Result<Arc<ArcSwap<RuntimeConfig>>, io::Error> {
-    let config = read_runtime_config(&path).await.map_err(|e| {
+pub async fn read_initial_config<P: AsRef<Path>>(path: P) -> Result<RuntimeConfig, io::Error> {
+    read_runtime_config(&path).await.map_err(|e| {
         io::Error::new(
             e.kind(),
             format!("Could not load configuration due to: {}", e),
         )
-    })?;
-    Ok(Arc::new(ArcSwap::from_pointee(config)))
+    })
 }
 
 async fn read_runtime_config<P>(path: P) -> Result<RuntimeConfig, io::Error>
@@ -26,11 +21,10 @@ where
 {
     let config = TomlConfig::read(&path)?;
     let listen_address = config.listen_address.parse().map_err(invalid_data)?;
-    let pool: Arc<BackendPool> = Arc::new(config.backend.into());
 
     Ok(RuntimeConfig {
         listen_address,
-        backend: pool,
+        backend: config.backend.into(),
     })
 }
 
@@ -43,7 +37,7 @@ where
 
 pub struct RuntimeConfig {
     pub listen_address: SocketAddr,
-    pub backend: Arc<BackendPool>,
+    pub backend: BackendPool,
 }
 
 #[derive(Debug, Deserialize)]

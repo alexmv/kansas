@@ -1,14 +1,12 @@
 use crate::{handler::BackendPool, health::Healthiness};
 use anyhow::Result;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use dashmap::DashMap;
-use hyper::body::HttpBody;
 use hyper::{Body, Method, Request, Response};
-use log::{info, debug};
+use log::{debug, info};
+use std::mem;
 use thiserror::Error;
 use url::form_urlencoded;
-
-use std::sync::Arc;
 
 #[derive(Error, Debug)]
 pub enum BadBackendError {
@@ -25,8 +23,31 @@ pub enum BadBackendError {
     UnknownQueue(String),
 }
 
+// This RAII wrapper streams a request body into memory so we can
+// examine it; when the wrapper is dropped, we stuff the body back
+// into the request so it can be forwarded to the backend.
+struct PeekBody<'a> {
+    bytes: Bytes,
+    body: &'a mut Body,
+}
+
+impl PeekBody<'_> {
+    async fn new(body: &mut Body) -> Result<PeekBody, hyper::Error> {
+        Ok(PeekBody {
+            bytes: hyper::body::to_bytes(&mut *body).await?,
+            body,
+        })
+    }
+}
+
+impl Drop for PeekBody<'_> {
+    fn drop(&mut self) {
+        *self.body = Body::from(mem::take(&mut self.bytes));
+    }
+}
+
 async fn get_port(
-    queue_map: Arc<DashMap<String, u16>>,
+    queue_map: &DashMap<String, u16>,
     request: &mut Request<Body>,
 ) -> Result<u16, BadBackendError> {
     if request.uri().path() == "/api/v1/events/internal" {
@@ -42,28 +63,19 @@ async fn get_port(
             .parse::<u16>()
             .map_err(|_| BadBackendError::BadRequest("Failed to parse port as int".into()))?)
     } else {
-        let buffer = match request.method().as_str() {
-            "DELETE" => {
-                // We need to consume the body from the request, while
-                // also leaving it to be sent to the backend
-                let body = request.body_mut();
-                let mut buf = BytesMut::with_capacity(body.size_hint().lower() as usize);
-                while let Some(chunk) = body.data().await {
-                    buf.extend_from_slice(&chunk.map_err(|_| {
-                        BadBackendError::BadRequest("Failed to read request body".into())
-                    })?);
-                }
-                let buf = buf.freeze();
-                *request.body_mut() = Body::from(buf.clone());
-                buf
+        let peek_body;
+        let body_bytes = match *request.method() {
+            Method::DELETE => {
+                peek_body = PeekBody::new(request.body_mut()).await.map_err(|_| {
+                    BadBackendError::BadRequest("Failed to read request body".into())
+                })?;
+                &peek_body.bytes
             }
-            "GET" => Bytes::from(
-                request
-                    .uri()
-                    .query()
-                    .ok_or_else(|| BadBackendError::BadRequest("No query string".into()))?
-                    .to_owned(),
-            ),
+            Method::GET => request
+                .uri()
+                .query()
+                .ok_or_else(|| BadBackendError::BadRequest("No query string".into()))?
+                .as_bytes(),
             _ => {
                 return Err(BadBackendError::BadRequest(format!(
                     "Unknown method {}",
@@ -71,29 +83,33 @@ async fn get_port(
                 )))
             }
         };
-        let queue_id = form_urlencoded::parse(&buffer)
+        let queue_id = form_urlencoded::parse(body_bytes)
             .into_owned()
             .find(|pair| pair.0 == "queue_id")
             .ok_or_else(|| BadBackendError::UnknownQueue("(missing)".into()))?
             .1;
         let queue_backend = queue_map
-            .get(queue_id.as_str())
+            .get(&queue_id)
             .ok_or(BadBackendError::UnknownQueue(queue_id))?;
-        debug!("Routing queue {} to port {}", queue_backend.key(), *queue_backend);
+        debug!(
+            "Routing queue {} to port {}",
+            queue_backend.key(),
+            *queue_backend
+        );
         Ok(*queue_backend)
     }
 }
 
 pub async fn choose_backend(
-    pool: Arc<BackendPool>,
-    queue_map: Arc<DashMap<String, u16>>,
+    pool: &BackendPool,
+    queue_map: &DashMap<String, u16>,
     request: &mut Request<Body>,
 ) -> Result<(u16, String), BadBackendError> {
     let port = get_port(queue_map, request).await?;
     let backend = format!("127.0.0.1:{}", port);
     let health = pool
         .addresses
-        .get(backend.as_str())
+        .get(&backend)
         .ok_or_else(|| BadBackendError::UnknownHost(backend.clone()))?;
     if health.load().as_ref() != &Healthiness::Healthy {
         // Backend is down, stall for time?
@@ -104,7 +120,7 @@ pub async fn choose_backend(
 }
 
 pub fn store_backend(
-    queue_map: Arc<DashMap<String, u16>>,
+    queue_map: &DashMap<String, u16>,
     method: Method,
     resp: &Response<Body>,
     port: u16,
@@ -112,7 +128,7 @@ pub fn store_backend(
     if resp.status().is_success() {
         if let Some(queue_header) = resp.headers().get("x-tornado-queue-id") {
             if let Ok(queue_id) = queue_header.to_str() {
-                if method == "DELETE" {
+                if method == Method::DELETE {
                     info!("Removed queue {} from port {}", queue_id, port);
                     queue_map.remove(queue_id).unwrap();
                 } else {

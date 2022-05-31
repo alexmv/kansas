@@ -24,7 +24,7 @@ use std::{
 
 pub struct MainService {
     pub client_address: SocketAddr,
-    pub config: Arc<ArcSwap<RuntimeConfig>>,
+    pub config: Arc<RuntimeConfig>,
     pub queue_map: Arc<DashMap<String, u16>>,
 }
 
@@ -50,27 +50,27 @@ impl Service<Request<Body>> for MainService {
             return Box::pin(async move { metrics::handler() });
         }
 
-        let config = self.config.load();
+        let config = Arc::clone(&self.config);
 
-        let pool = config.backend.clone();
-        let queue_map = self.queue_map.clone();
+        let queue_map = Arc::clone(&self.queue_map);
         let client_address = self.client_address;
 
         Box::pin(metrics::instrumented(
             request.method().clone(),
             async move {
+                let pool = &config.backend;
                 let method = request.method().clone();
-                let backend = choose_backend(pool.clone(), queue_map.clone(), &mut request).await;
+                let backend = choose_backend(pool, &queue_map, &mut request).await;
                 match backend {
                     Ok((port, chosen_backend)) => {
                         let resp = forward_request_to_backend(
-                            chosen_backend.as_str(),
+                            &chosen_backend,
                             request,
                             &client_address,
-                            pool.clone(),
+                            pool,
                         )
                         .await;
-                        store_backend(queue_map, method, &resp, port);
+                        store_backend(&queue_map, method, &resp, port);
                         Ok(resp)
                     }
                     Err(BadBackendError::UnknownQueue(q)) => Ok(bad_queue(q)),
@@ -87,9 +87,8 @@ impl Service<Request<Body>> for MainService {
 fn append_forwarded_for(existing_forwarded_for: Option<&HeaderValue>, client_ip: String) -> String {
     match existing_forwarded_for {
         Some(existing_forwarded_for) => {
-            let mut forwarded_for = existing_forwarded_for.to_str().unwrap_or("").to_owned();
-            forwarded_for.push_str(&format!(", {}", &client_ip));
-            forwarded_for
+            let forwarded_for = existing_forwarded_for.to_str().unwrap_or("");
+            format!("{}, {}", forwarded_for, client_ip)
         }
         None => client_ip,
     }
@@ -99,7 +98,7 @@ async fn forward_request_to_backend(
     backend_address: &str,
     request: Request<Body>,
     client_address: &SocketAddr,
-    pool: Arc<BackendPool>,
+    pool: &BackendPool,
 ) -> Response<Body> {
     let path = request.uri().path_and_query().unwrap().clone();
     let url = Uri::builder()
@@ -116,8 +115,7 @@ async fn forward_request_to_backend(
         IpAddr::V4(v4) => v4.to_string(),
         IpAddr::V6(v6) => v6
             .to_ipv4()
-            .map(|v4| v4.to_string())
-            .unwrap_or_else(|| v6.to_string()),
+            .map_or_else(|| v6.to_string(), |v4| v4.to_string()),
     };
     let builder = request
         .headers()

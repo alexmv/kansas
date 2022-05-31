@@ -1,4 +1,3 @@
-use arc_swap::ArcSwap;
 use clap::{Arg, Command};
 use configuration::{read_initial_config, RuntimeConfig};
 use std::{io, sync::Arc};
@@ -36,19 +35,19 @@ pub async fn main() -> Result<(), io::Error> {
 
     console_subscriber::init();
 
-    let config = read_initial_config(&config_path).await?;
+    let config = Arc::new(read_initial_config(&config_path).await?);
     try_join!(
-        watch_health(config.clone()),
-        listen_for_http_request(config.clone()),
+        watch_health(Arc::clone(&config)),
+        listen_for_http_request(Arc::clone(&config)),
     )?;
     Ok(())
 }
 
-async fn watch_health(config: Arc<ArcSwap<RuntimeConfig>>) -> Result<(), io::Error> {
-    health::watch_health(config).await;
+async fn watch_health(config: Arc<RuntimeConfig>) -> Result<(), io::Error> {
+    health::watch_health(&config).await;
     Ok(())
 }
 
-async fn listen_for_http_request(config: Arc<ArcSwap<RuntimeConfig>>) -> Result<(), io::Error> {
+async fn listen_for_http_request(config: Arc<RuntimeConfig>) -> Result<(), io::Error> {
     server::create(config).await
 }

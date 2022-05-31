@@ -11,6 +11,7 @@ use log::info;
 use serde::Deserialize;
 use std::{
     fmt::{self, Debug},
+    str::FromStr,
     sync::Arc,
     time::Duration,
 };
@@ -41,11 +42,10 @@ impl fmt::Display for Healthiness {
     }
 }
 
-pub async fn watch_health(config: Arc<ArcSwap<RuntimeConfig>>) {
-    let mut interval_timer = interval(config.load().backend.health_config.interval);
+pub async fn watch_health(config: &RuntimeConfig) {
+    let mut interval_timer = interval(config.backend.health_config.interval);
     loop {
         interval_timer.tick().await;
-        let config = config.load();
         let mut checks = Vec::new();
         for (server_address, healthiness) in &config.backend.addresses {
             let future = check_server_health_once(
@@ -68,12 +68,12 @@ async fn check_server_health_once(
     let uri = uri::Uri::builder()
         .scheme("http")
         .path_and_query(&health_config.path)
-        .authority(Authority::from_maybe_shared(server_address.clone()).unwrap())
+        .authority(Authority::from_str(&server_address).unwrap())
         .build()
         .unwrap();
 
     let result = contact_server(uri, health_config.timeout).await;
-    update_health(server_address.as_str(), &result, healthiness, true)
+    update_health(&server_address, &result, healthiness, true)
 }
 
 async fn contact_server(server_address: Uri, timeout: Duration) -> Result<Response<Body>> {
