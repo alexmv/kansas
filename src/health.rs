@@ -46,15 +46,17 @@ pub async fn watch_health(config: &RuntimeConfig) {
     let mut interval_timer = interval(config.backend.health_config.interval);
     loop {
         interval_timer.tick().await;
-        let mut checks = Vec::new();
-        for (server_address, healthiness) in &config.backend.addresses {
-            let future = check_server_health_once(
-                server_address.clone(),
-                healthiness,
-                &config.backend.health_config,
-            );
-            checks.push(future);
-        }
+        let checks = config
+            .backend
+            .addresses
+            .iter()
+            .map(|(server_address, healthiness)| {
+                check_server_health_once(
+                    server_address.clone(),
+                    healthiness,
+                    &config.backend.health_config,
+                )
+            });
         join_all(checks).await;
     }
 }
