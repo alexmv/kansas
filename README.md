@@ -101,7 +101,6 @@ what-not, however.
 ## TODO
 
 - Load-test
-  - Make a pretend Tornado service in Rust which sleeps 1min and returns a noop
 - Garbage-collection of queues after 10 minutes, to match Tornado
 - Persist the listen socket, using https://github.com/tormol/uds
 - Persist the internal state
