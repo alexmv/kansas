@@ -32,7 +32,7 @@ struct PeekBody<'a> {
 }
 
 impl PeekBody<'_> {
-    async fn new(body: &mut Body) -> Result<PeekBody, hyper::Error> {
+    async fn new(body: &mut Body) -> Result<PeekBody<'_>, hyper::Error> {
         Ok(PeekBody {
             bytes: hyper::body::to_bytes(&mut *body).await?,
             body,
