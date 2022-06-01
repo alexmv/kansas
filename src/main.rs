@@ -34,6 +34,8 @@ pub async fn main() -> Result<(), io::Error> {
 
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    console_subscriber::init();
+
     let config = read_initial_config(&config_path).await?;
     try_join!(
         watch_health(config.clone()),
