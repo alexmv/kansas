@@ -8,8 +8,12 @@ mod configuration;
 mod error_response;
 mod handler;
 mod health;
+mod metrics;
 mod server;
 mod state;
+
+#[macro_use]
+extern crate lazy_static;
 
 #[tokio::main]
 pub async fn main() -> Result<(), io::Error> {
