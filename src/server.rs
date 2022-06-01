@@ -1,20 +1,24 @@
 use crate::{configuration::RuntimeConfig, handler::MainService};
 use arc_swap::ArcSwap;
+use dashmap::DashMap;
 use futures::TryFutureExt;
 use hyper::server::conn::AddrStream;
 use hyper::{service::make_service_fn, Server};
 use std::{io, sync::Arc};
 
 pub async fn create(config: Arc<ArcSwap<RuntimeConfig>>) -> Result<(), io::Error> {
+    let queue_map: Arc<DashMap<String, u16>> = Arc::new(DashMap::new());
     let address = config.load().listen_address;
     let service = make_service_fn(move |stream: &AddrStream| {
         let client_address = stream.remote_addr();
         let config = config.clone();
+        let queue_map = queue_map.clone();
 
         async move {
             Ok::<_, io::Error>(MainService {
                 client_address,
                 config,
+                queue_map,
             })
         }
     });

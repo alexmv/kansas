@@ -100,9 +100,6 @@ what-not, however.
 
 ## TODO
 
-- Forward requests to the right shard based on the queue-id/shard when it was
-  made
-- Delete the state when we see a successful DELETE go to the backend
 - Load-test
   - Make a pretend Tornado service in Rust which sleeps 1min and returns a noop
 - Garbage-collection of queues after 10 minutes, to match Tornado

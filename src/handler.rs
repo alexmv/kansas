@@ -1,16 +1,17 @@
 use crate::{
     configuration::RuntimeConfig,
-    error_response::{bad_gateway, log_error},
+    error_response::{bad_gateway, bad_queue, log_error},
     health::{update_health, HealthConfig, Healthiness},
+    state::{choose_backend, store_backend, BadBackendError},
 };
 use arc_swap::ArcSwap;
+use dashmap::DashMap;
 use futures::Future;
 use hyper::{
     client::HttpConnector, header::HeaderValue, service::Service, Body, Client, Request, Response,
     Uri,
 };
 use log::info;
-use rand::{thread_rng, Rng};
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
@@ -23,6 +24,7 @@ use std::{
 pub struct MainService {
     pub client_address: SocketAddr,
     pub config: Arc<ArcSwap<RuntimeConfig>>,
+    pub queue_map: Arc<DashMap<String, u16>>,
 }
 
 impl Service<Request<Body>> for MainService {
@@ -35,7 +37,7 @@ impl Service<Request<Body>> for MainService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut request: Request<Body>) -> Self::Future {
         info!(
             "{:#?} {} {}",
             request.version(),
@@ -46,32 +48,32 @@ impl Service<Request<Body>> for MainService {
         let config = self.config.load();
 
         let pool = config.backend.clone();
+        let queue_map = self.queue_map.clone();
         let client_address = self.client_address;
 
         Box::pin(async move {
-            let working_addresses = pool
-                .addresses
-                .iter()
-                .filter(|(_, healthiness)| healthiness.load().as_ref() == &Healthiness::Healthy)
-                .map(|(address, _)| address.as_str())
-                .collect::<Vec<_>>();
-
-            if working_addresses.is_empty() {
-                return Ok(bad_gateway());
-            }
-            let backend_address = choose_backend(&working_addresses, &request);
-            let result =
-                forward_request_to_backend(backend_address, request, &client_address, pool.clone())
+            let method = request.method().clone();
+            let backend = choose_backend(pool.clone(), queue_map.clone(), &mut request).await;
+            match backend {
+                Ok((port, chosen_backend)) => {
+                    let resp = forward_request_to_backend(
+                        chosen_backend.as_str(),
+                        request,
+                        &client_address,
+                        pool.clone(),
+                    )
                     .await;
-            Ok(result)
+                    store_backend(queue_map, method, &resp, port);
+                    Ok(resp)
+                }
+                Err(BadBackendError::UnknownQueue(q)) => Ok(bad_queue(q)),
+                Err(error) => {
+                    log_error(error);
+                    Ok(bad_gateway())
+                }
+            }
         })
     }
-}
-
-fn choose_backend<'l>(backend_addresses: &'l [&str], _request: &Request<Body>) -> &'l str {
-    let mut rng = thread_rng();
-    let index = rng.gen_range(0..backend_addresses.len());
-    backend_addresses[index]
 }
 
 fn append_forwarded_for(existing_forwarded_for: Option<&HeaderValue>, client_ip: String) -> String {
