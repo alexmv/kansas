@@ -8,6 +8,8 @@ fi
 
 cores=$(getconf _NPROCESSORS_ONLN)
 
+ulimit -n 10000
+
 for _ in $(seq 1 "$cores"); do
 	./venv/bin/locust --worker &
 done
