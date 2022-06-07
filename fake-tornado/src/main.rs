@@ -12,11 +12,12 @@ use std::time::Duration;
 struct AppState {
     sleep_duration: Duration,
     heartbeat_id: Mutex<u32>,
+    next_queue_id: Mutex<u32>,
 }
 
 #[derive(Deserialize)]
 struct QueueIdForm {
-    queue_id: String,
+    queue_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -26,9 +27,16 @@ struct GetEventsForm {
 }
 
 #[post("/events/internal")]
-async fn create_queue(form: web::Form<QueueIdForm>) -> impl Responder {
-    let queue_id = form.queue_id.clone();
-    let resp = json!({"result":"success","msg":"","events":[]});
+async fn create_queue(form: web::Form<QueueIdForm>, data: web::Data<AppState>) -> impl Responder {
+    let queue_id = match form.queue_id.clone() {
+        Some(provided) => provided,
+        None => {
+            let mut queue_int = data.next_queue_id.lock();
+            *queue_int += 1;
+            format!("{queue_int}:1")
+        }
+    };
+    let resp = json!({"result":"success","msg":"","events":[], "queue_id": queue_id});
     HttpResponse::Ok()
         .append_header(("x-tornado-queue-id", queue_id))
         .content_type(ContentType::json())
@@ -37,7 +45,7 @@ async fn create_queue(form: web::Form<QueueIdForm>) -> impl Responder {
 
 #[delete("/events")]
 async fn delete_queue(form: web::Form<QueueIdForm>) -> impl Responder {
-    let queue_id = form.queue_id.clone();
+    let queue_id = form.queue_id.clone().expect("No queue-id");
     let resp = json!({"result":"success","msg":""});
     HttpResponse::Ok()
         .content_type(ContentType::json())
@@ -109,6 +117,7 @@ async fn main() -> std::io::Result<()> {
     let state = web::Data::new(AppState {
         sleep_duration,
         heartbeat_id: Mutex::new(0),
+        next_queue_id: Mutex::new(0),
     });
 
     env_logger::init_from_env(Env::default().default_filter_or("info"));
