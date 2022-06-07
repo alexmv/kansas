@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use futures::Future;
 use hyper::{
     client::HttpConnector, header::HeaderValue, service::Service, Body, Client, Request, Response,
-    Uri,
+    StatusCode, Uri,
 };
 use log::info;
 use std::{
@@ -63,15 +63,19 @@ impl Service<Request<Body>> for MainService {
                 let backend = choose_backend(pool, &queue_map, &mut request).await;
                 match backend {
                     Ok((port, chosen_backend)) => {
-                        let resp = forward_request_to_backend(
-                            &chosen_backend,
-                            request,
-                            &client_address,
-                            pool,
-                        )
-                        .await;
-                        store_backend(&queue_map, method, &resp, port);
-                        Ok(resp)
+                        if request.method() == "GET" {
+                            Ok(redirect_to_backend(port, request))
+                        } else {
+                            let resp = forward_request_to_backend(
+                                &chosen_backend,
+                                request,
+                                &client_address,
+                                pool,
+                            )
+                            .await;
+                            store_backend(&queue_map, method, &resp, port);
+                            Ok(resp)
+                        }
                     }
                     Err(BadBackendError::UnknownQueue(q)) => Ok(bad_queue(q)),
                     Err(error) => {
@@ -143,6 +147,19 @@ async fn forward_request_to_backend(
         }
         Ok(res) => res,
     }
+}
+
+fn redirect_to_backend(port: u16, request: Request<Body>) -> Response<Body> {
+    let path = request.uri().path_and_query().unwrap();
+    let url = Uri::builder()
+        .path_and_query(format!("/tornado/{port}{path}"))
+        .build()
+        .unwrap();
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("X-Accel-Redirect", url.to_string())
+        .body(Body::empty())
+        .unwrap()
 }
 
 #[derive(Debug)]
