@@ -7,7 +7,7 @@ use hyper::{
     Body, Client, Response, Result, StatusCode, Uri,
 };
 use hyper_timeout::TimeoutConnector;
-use log::info;
+use log::warn;
 use serde::Deserialize;
 use std::{
     fmt::{self, Debug},
@@ -110,7 +110,7 @@ pub fn update_health(
 
     let previous_healthiness = healthiness.load();
     if previous_healthiness.as_ref() != &result {
-        info!("Backend health change for {}: {}", &server_address, &result);
+        warn!("Backend health change for {}: {}", &server_address, &result);
         healthiness.store(Arc::new(result));
     }
 }
