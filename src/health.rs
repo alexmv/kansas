@@ -108,8 +108,7 @@ pub fn update_health(
         }
     };
 
-    let previous_healthiness = healthiness.load();
-    if previous_healthiness.as_ref() != &result {
+    if **healthiness.load() != result {
         warn!("Backend health change for {}: {}", &server_address, &result);
         healthiness.store(Arc::new(result));
     }

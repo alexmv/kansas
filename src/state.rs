@@ -111,7 +111,7 @@ pub async fn choose_backend(
         .addresses
         .get(&backend)
         .ok_or_else(|| BadBackendError::UnknownHost(backend.clone()))?;
-    if health.load().as_ref() != &Healthiness::Healthy {
+    if **health.load() != Healthiness::Healthy {
         // Backend is down, stall for time?
         Err(BadBackendError::UnhealthyHost(backend))
     } else {
