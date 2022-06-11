@@ -108,8 +108,7 @@ pub fn update_health(
         }
     };
 
-    if **healthiness.load() != result {
+    if **healthiness.load() != result && *healthiness.swap(Arc::new(result.clone())) != result {
         warn!("Backend health change for {}: {}", &server_address, &result);
-        healthiness.store(Arc::new(result));
     }
 }
